@@ -1,4 +1,4 @@
-const CACHE_NAME = 'summoner-survivor-v1';
+const CACHE_NAME = 'summoner-survivor-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -25,8 +25,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('./')));
+  if (request.mode === 'navigate' || request.destination === 'script' || request.destination === 'style' || request.destination === 'worker') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached ?? caches.match('./')))
+    );
     return;
   }
 

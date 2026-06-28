@@ -29,6 +29,21 @@ body {
   -webkit-touch-callout: none;
 }
 
+#boot-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 28px;
+  color: #ffe2a0;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: center;
+  background: #09080d;
+}
+
 .hidden {
   display: none !important;
 }

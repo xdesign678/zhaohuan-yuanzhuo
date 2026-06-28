@@ -57,6 +57,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   public create(): void {
+    document.getElementById('boot-fallback')?.remove();
     this.cameras.main.setBackgroundColor('#09080d');
     this.createBackdrop();
 
