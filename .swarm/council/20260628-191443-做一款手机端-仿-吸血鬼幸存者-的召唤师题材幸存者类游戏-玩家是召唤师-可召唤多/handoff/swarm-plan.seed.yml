@@ -1,0 +1,85 @@
+mode: custom
+objective: 用 Phaser3+TypeScript+Vite 构建 H5 手机召唤师幸存者 Demo（5宠自动战斗+元素反应/薄猎印连携+三选一与宠物成长+轻度局外成长），4周打磨到手机浏览器可玩、150-200怪≥30fps、可外发
+constraints: 零成本仅用免费开源+AI/jsfxr占位素材; 技术栈固定 Phaser3+TS+Vite, 主流且AI友好; 碰撞统一SpatialGrid不用Arcade全量; 竖屏+全屏拖拽; 必保三核心(召唤多宠自动战斗/宠物连携/宠物成长); 无后端用localStorage
+tasks:
+  - id: T1
+    title: 脚手架+竖屏FIT+场景骨架+全屏拖拽移动
+    owner_role: swarm-worker
+    files: src/main.ts, src/scenes/*, src/ui/DragInput.ts
+    validation: npm run build && npx tsc --noEmit
+    done_when: 手机浏览器打开能拖动召唤师, 无手势冲突
+  - id: T2
+    title: 性能地基 SpatialGrid+ObjectPool+EntityManager 并做200怪压测(优先级最高)
+    owner_role: swarm-worker
+    files: src/core/SpatialGrid.ts, src/core/ObjectPool.ts, src/core/EntityManager.ts
+    validation: 200占位怪压测帧率
+    done_when: 空场景200怪≥30fps, 否则不进T5
+  - id: T3
+    title: 怪潮刷新+难度曲线+敌人朝玩家移动
+    owner_role: swarm-worker
+    files: src/systems/SpawnSystem.ts, src/systems/EnemySystem.ts, src/data/EnemyDefs.ts, src/data/Balance.ts
+    validation: 手动观察
+    done_when: 怪持续刷新且随时间变强
+  - id: T4
+    title: 战斗系统(宠物索敌锁定粘性+攻击+伤害100ms结算)+经验掉落/升级触发
+    owner_role: swarm-worker
+    files: src/systems/PetAISystem.ts, src/systems/CombatSystem.ts, src/systems/XPSystem.ts
+    validation: 手动观察
+    done_when: 1宠自动打怪掉经验能升级, 宠物不横跳
+  - id: T5
+    title: 5宠数据驱动+各自攻击行为(近战/火AOE/冰控/雷链/治疗)
+    owner_role: swarm-worker
+    files: src/data/PetDefs.ts, src/entities/Pet.ts
+    validation: 手动观察
+    done_when: 5宠可召唤且行为可区分
+  - id: T6
+    title: 元素标记+薄猎印层+2连携(融化/超导)+防雪崩硬上限
+    owner_role: swarm-worker
+    files: src/systems/ElementSystem.ts, src/data/SynergyDefs.ts, tests/synergy.test.ts
+    validation: npm run test (连携单元测试先行)
+    done_when: 火+冰/冰+雷稳定触发且不雪崩, 单测通过
+  - id: T7
+    title: 升级三选一卡池(权重优先已有宠)+宠物Lv1-5成长
+    owner_role: swarm-worker
+    files: src/data/UpgradeDefs.ts, src/ui/UpgradePanel.ts, src/ui/UpgradeCard.ts
+    validation: 手动观察
+    done_when: 升级弹3卡, 四类都出过, 构筑能成型
+  - id: T8
+    title: 局外成长树+SaveManager(write-then-validate+version迁移)
+    owner_role: swarm-worker
+    files: src/storage/SaveManager.ts, src/scenes/Title.ts
+    validation: 刷新+坏档测试
+    done_when: 魂晶节点可买, 刷新后保留, 坏档回退不崩
+  - id: T9
+    title: 移动端UI/HUD/连携飘字/磁吸/受击反馈/结算/标题+拖拽手感
+    owner_role: swarm-ui-worker
+    files: src/ui/HUD.ts, src/ui/PetStatusBar.ts, src/ui/DamageNumber.ts, src/ui/ResultPanel.ts
+    validation: 真机视觉检查(iPhone+安卓)
+    done_when: UI不重叠不截断, 手感顺滑, 安全区适配
+  - id: T10
+    title: 音效(jsfxr)+震动+视觉特效打磨(觉醒形态/连携特效)
+    owner_role: swarm-ui-worker
+    files: src/utils/audio.ts, src/ui/*
+    validation: 手动体验
+    done_when: 攻击/受伤/升级/连携都有反馈
+  - id: T11
+    title: 性能优化(视野裁剪/图集/降级/DeviceDetect)+真机适配(iOS音频解锁/手势/安全区)+SW缓存
+    owner_role: swarm-worker
+    files: src/utils/DeviceDetect.ts, public/sw.js, index.html
+    validation: 多真机帧率+iOS测试
+    done_when: 中端150-200怪≥30fps, 低端降级, iOS可玩, 二次打开秒开
+  - id: T12
+    title: 数值平衡+全量测试+生产构建/部署到静态托管
+    owner_role: swarm-tester
+    files: tests/*, 部署配置
+    validation: npm run build && npm run test
+    done_when: 一局可玩≥10分钟, build<1.5MB通过, 可外发链接
+validation_commands:
+  - npx tsc --noEmit
+  - npm run build
+  - npm run test
+done_when:
+  - 三核心齐备(5宠自动战斗/元素反应+猎印连携/宠物Lv1-5+三选一成长)且手机浏览器可玩
+  - 中端机150-200怪同屏≥30fps, 低端降级≥24fps, 10分钟无明显内存增长
+  - 局外成长存档刷新后保留且坏档不崩
+  - tsc零报错, vite build产物<1.5MB, 连携有单元测试, 可部署外发

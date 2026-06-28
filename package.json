@@ -1,0 +1,21 @@
+{
+  "name": "zhaohuan-yuanzhuo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "verify:m0": "node tools/verify-m0-browser.mjs"
+  },
+  "dependencies": {
+    "phaser": "3.80.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.15",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.6",
+    "vitest": "^2.0.5"
+  }
+}
