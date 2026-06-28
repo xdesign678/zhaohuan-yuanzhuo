@@ -7,7 +7,7 @@ export const BALANCE = {
     baseHp: 14,
     baseSpeed: 36,
     xpValue: 12,
-    contactDamage: 7,
+    contactDamage: 5,
     contactInterval: 0.45,
     softCap: 200,
     spawnInterval: 0.32
@@ -25,7 +25,8 @@ export const BALANCE = {
   summoner: {
     radius: 21,
     pickupRadius: 72,
-    baseXpToNext: 10
+    baseXpToNext: 10,
+    contactInvulnerability: 0.58
   },
   spatialGrid: {
     cellSize: 112

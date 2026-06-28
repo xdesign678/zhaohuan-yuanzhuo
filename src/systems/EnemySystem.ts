@@ -34,7 +34,7 @@ export class EnemySystem {
   }
 
   private applyContactDamage(state: GameState, enemy: GameState['enemies'][number]): void {
-    if (enemy.contactCooldownRemaining > 0 || state.runStatus !== 'playing') {
+    if (enemy.contactCooldownRemaining > 0 || state.summoner.damageCooldownUntil > state.stats.runtime || state.runStatus !== 'playing') {
       return;
     }
 
@@ -50,6 +50,7 @@ export class EnemySystem {
     }
 
     state.summoner.hitFlashUntil = state.stats.runtime + 0.24;
+    state.summoner.damageCooldownUntil = state.stats.runtime + BALANCE.summoner.contactInvulnerability;
     enemy.contactCooldownRemaining = BALANCE.enemy.contactInterval;
 
     if (state.summoner.hp <= 0) {

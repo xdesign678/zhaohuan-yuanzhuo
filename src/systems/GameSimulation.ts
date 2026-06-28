@@ -59,6 +59,7 @@ export class GameSimulation {
         pickupRadius: BALANCE.summoner.pickupRadius + this.growthBonuses.pickupRadiusBonus,
         kills: 0,
         hitFlashUntil: 0,
+        damageCooldownUntil: 0,
         upgradeChoices: [],
         upgradePaused: false
       },

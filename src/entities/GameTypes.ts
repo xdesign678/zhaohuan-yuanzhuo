@@ -18,6 +18,7 @@ export interface Summoner {
   pickupRadius: number;
   kills: number;
   hitFlashUntil: number;
+  damageCooldownUntil: number;
   upgradeChoices: UpgradeChoice[];
   upgradePaused: boolean;
 }

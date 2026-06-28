@@ -42,6 +42,7 @@ function createState(enemy = createEnemy()): GameState {
       pickupRadius: 72,
       kills: 0,
       hitFlashUntil: 0,
+      damageCooldownUntil: 0,
       upgradeChoices: [],
       upgradePaused: false
     },
