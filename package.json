@@ -12,7 +12,8 @@
     "verify:m2": "node tools/verify-m2-browser.mjs",
     "assets:m3": "python3 tools/art/process_m3_assets.py",
     "verify:m3:assets": "python3 tools/art/verify_m3_assets.py",
-    "verify:m3": "npm run verify:m3:assets && node tools/verify-m3-browser.mjs"
+    "verify:m3": "npm run verify:m3:assets && node tools/verify-m3-browser.mjs",
+    "verify:m4": "node tools/verify-m4-browser.mjs"
   },
   "dependencies": {
     "phaser": "3.80.1"

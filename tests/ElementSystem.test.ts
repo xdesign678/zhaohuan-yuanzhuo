@@ -20,7 +20,8 @@ function createEnemy(id = 1): Enemy {
     slowUntil: 0,
     slowMultiplier: 1,
     defenseBreakUntil: 0,
-    damageTakenMultiplier: 1
+    damageTakenMultiplier: 1,
+    contactCooldownRemaining: 0
   };
 }
 
@@ -33,11 +34,14 @@ function createState(enemy = createEnemy()): GameState {
       hp: 100,
       maxHp: 100,
       shield: 0,
+      moveSpeedMultiplier: 1,
+      xpMultiplier: 1,
       level: 1,
       xp: 0,
       xpToNext: 10,
       pickupRadius: 72,
       kills: 0,
+      hitFlashUntil: 0,
       upgradeChoices: [],
       upgradePaused: false
     },
@@ -51,7 +55,11 @@ function createState(enemy = createEnemy()): GameState {
       spawned: 0,
       reactions: 0
     },
-    reactionDamageMultiplier: 1
+    reactionDamageMultiplier: 1,
+    soulCrystalMultiplier: 1,
+    runStatus: 'playing',
+    runSettled: false,
+    lastRunResult: null
   };
 }
 

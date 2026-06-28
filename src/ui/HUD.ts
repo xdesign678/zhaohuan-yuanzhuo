@@ -3,8 +3,13 @@ import type { GameState } from '../entities/GameTypes';
 export class HUD {
   private readonly root: HTMLDivElement;
   private readonly topLine: HTMLDivElement;
+  private readonly healthLine: HTMLDivElement;
   private readonly petLine: HTMLDivElement;
   private readonly xpFill: HTMLDivElement;
+  private readonly hpFill: HTMLDivElement;
+  private readonly reactionFlash: HTMLDivElement;
+  private lastReactionCount = 0;
+  private reactionVisibleUntil = 0;
 
   public constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
@@ -12,6 +17,15 @@ export class HUD {
 
     this.topLine = document.createElement('div');
     this.topLine.className = 'hud-row hud-top';
+
+    this.healthLine = document.createElement('div');
+    this.healthLine.className = 'hud-row hud-health';
+
+    const hpBar = document.createElement('div');
+    hpBar.className = 'hp-bar';
+    this.hpFill = document.createElement('div');
+    this.hpFill.className = 'hp-fill';
+    hpBar.append(this.hpFill);
 
     this.petLine = document.createElement('div');
     this.petLine.className = 'hud-row hud-pet';
@@ -22,7 +36,10 @@ export class HUD {
     this.xpFill.className = 'xp-fill';
     xpBar.append(this.xpFill);
 
-    this.root.append(this.topLine, this.petLine, xpBar);
+    this.reactionFlash = document.createElement('div');
+    this.reactionFlash.className = 'reaction-flash hidden';
+
+    this.root.append(this.topLine, this.healthLine, hpBar, this.petLine, xpBar, this.reactionFlash);
     parent.append(this.root);
   }
 
@@ -38,12 +55,31 @@ export class HUD {
       .map((pet) => `${pet.definition.name}${pet.level}`)
       .join('  ');
 
-    this.topLine.textContent = `${minutes}:${seconds}  Lv ${summoner.level}  Kill ${summoner.kills}  Enemy ${activeEnemies}  R ${state.stats.reactions}  ${Math.round(fps)}fps`;
+    this.topLine.textContent = `${minutes}:${seconds}  Lv${summoner.level}  Kill ${summoner.kills}  Enemy ${activeEnemies}  ${Math.round(fps)}fps`;
+    this.healthLine.textContent = `HP ${Math.ceil(summoner.hp)}/${summoner.maxHp}  Shield ${Math.floor(summoner.shield)}  Reaction ${state.stats.reactions}`;
     this.petLine.textContent = petText || '无宠物';
+    this.hpFill.style.width = `${summoner.maxHp > 0 ? Math.max(0, Math.min(100, (summoner.hp / summoner.maxHp) * 100)) : 0}%`;
     this.xpFill.style.width = `${xpPercent}%`;
+    this.updateReactionFlash(state);
   }
 
   public destroy(): void {
     this.root.remove();
+  }
+
+  private updateReactionFlash(state: GameState): void {
+    const now = Date.now();
+    if (state.stats.reactions > this.lastReactionCount) {
+      const last = state.reactionEvents[state.reactionEvents.length - 1];
+      this.lastReactionCount = state.stats.reactions;
+      this.reactionVisibleUntil = now + 900;
+      this.reactionFlash.textContent = last?.type === 'superconduct' ? '超导' : '融化';
+      this.reactionFlash.classList.toggle('boosted', Boolean(last?.boosted));
+      this.reactionFlash.classList.remove('hidden');
+    }
+
+    if (now > this.reactionVisibleUntil) {
+      this.reactionFlash.classList.add('hidden');
+    }
   }
 }

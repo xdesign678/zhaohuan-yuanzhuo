@@ -9,11 +9,14 @@ export interface Summoner {
   hp: number;
   maxHp: number;
   shield: number;
+  moveSpeedMultiplier: number;
+  xpMultiplier: number;
   level: number;
   xp: number;
   xpToNext: number;
   pickupRadius: number;
   kills: number;
+  hitFlashUntil: number;
   upgradeChoices: UpgradeChoice[];
   upgradePaused: boolean;
 }
@@ -40,6 +43,7 @@ export interface Enemy {
   slowMultiplier: number;
   defenseBreakUntil: number;
   damageTakenMultiplier: number;
+  contactCooldownRemaining: number;
 }
 
 export interface Pet {
@@ -89,6 +93,14 @@ export interface GameStats {
   reactions: number;
 }
 
+export interface RunResult {
+  readonly kills: number;
+  readonly runtime: number;
+  readonly reactions: number;
+  readonly soulCrystals: number;
+  readonly totalSoulCrystals: number;
+}
+
 export interface GameState {
   summoner: Summoner;
   enemies: Enemy[];
@@ -98,4 +110,8 @@ export interface GameState {
   reactionEvents: ReactionEvent[];
   stats: GameStats;
   reactionDamageMultiplier: number;
+  soulCrystalMultiplier: number;
+  runStatus: 'playing' | 'gameOver';
+  runSettled: boolean;
+  lastRunResult: RunResult | null;
 }

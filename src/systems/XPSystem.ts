@@ -24,7 +24,7 @@ export class XPSystem {
       const distanceSquared = dx * dx + dy * dy;
 
       if (distanceSquared <= pickupRadiusSquared) {
-        summoner.xp += gem.value;
+        summoner.xp += Math.max(1, Math.floor(gem.value * summoner.xpMultiplier));
         entities.releaseGem(gem);
         this.applyLevelUps(state);
         continue;

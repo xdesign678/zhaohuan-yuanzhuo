@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const appUrl = process.env.M0_URL ?? 'http://localhost:5173/';
+const appUrl = process.env.M0_URL ?? 'http://localhost:5173/?m4autostart=1';
 const debugPort = Number(process.env.M0_DEBUG_PORT ?? 9333);
 const userDataDir = `/tmp/zhaohuan-yuanzhuo-chromium-${debugPort}`;
 const homeDir = `/tmp/zhaohuan-yuanzhuo-chromium-home-${debugPort}`;

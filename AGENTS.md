@@ -15,7 +15,7 @@
 ## 技术栈（固定，不要替换）
 - Phaser 3 (3.80+) + TypeScript (strict) + Vite 5
 - 为控制包体，Phaser 运行时固定从 `public/vendor/phaser.min.js` 以全局 `Phaser` 加载；业务代码只引用类型，不要重新 `import Phaser` 进 bundle。
-- 存档：localStorage（无后端、无账号）
+- 存档：localStorage（无后端、无账号）；当前主键 `summoner-survivor-save-v1`，写入必须先写 `.tmp` 临时键并校验，再落主键；坏档必须回退默认档。
 - 音效：jsfxr 程序化生成
 - 美术：图像模型生成像素素材 + 后处理 + 纹理图集
 
@@ -59,6 +59,7 @@
 - `npx tsc --noEmit`
 - `npm run build`（产物 < 1.5MB）
 - `npm run test`（至少连携系统单测）
+- 浏览器闸门随里程碑增加：当前已有 `npm run verify:m0` 到 `npm run verify:m4`。
 
 ## 里程碑闸门（done-when）
 - **M0** 手机能拖动占位方块、无手势冲突

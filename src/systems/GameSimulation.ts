@@ -2,10 +2,12 @@ import { EntityManager } from '../core/EntityManager';
 import { SpatialGrid } from '../core/SpatialGrid';
 import { BALANCE, GAME_HEIGHT, GAME_WIDTH } from '../data/Balance';
 import { getPetDefinition, PET_DEFS, type PetId } from '../data/PetDefs';
-import type { Enemy, GameState, Pet } from '../entities/GameTypes';
+import type { SaveData } from '../storage/SaveManager';
+import type { Enemy, GameState, Pet, RunResult } from '../entities/GameTypes';
 import { CombatSystem } from './CombatSystem';
 import { ElementSystem } from './ElementSystem';
 import { EnemySystem } from './EnemySystem';
+import { getGrowthBonuses, type GrowthBonuses } from './MetaProgressionSystem';
 import { PetAISystem } from './PetAISystem';
 import { SpawnSystem } from './SpawnSystem';
 import { UpgradeSystem } from './UpgradeSystem';
@@ -15,10 +17,13 @@ interface GameSimulationOptions {
   readonly autoSpawn: boolean;
   readonly initialEnemies: number;
   readonly combatEnabled: boolean;
+  readonly playerDamageEnabled: boolean;
+  readonly saveData?: SaveData;
 }
 
 export class GameSimulation {
   public readonly state: GameState;
+  private readonly growthBonuses: GrowthBonuses;
 
   private readonly entities = new EntityManager();
   private readonly enemyGrid = new SpatialGrid<Enemy>(BALANCE.spatialGrid.cellSize);
@@ -31,24 +36,30 @@ export class GameSimulation {
   private readonly xpSystem = new XPSystem(this.upgradeSystem);
 
   private constructor(private readonly options: GameSimulationOptions) {
+    this.growthBonuses = options.saveData ? getGrowthBonuses(options.saveData) : getDefaultBonuses();
+    const maxHp = 100 + this.growthBonuses.maxHpBonus;
+    const startingPetLevel = Math.min(5, 1 + this.growthBonuses.startingPetLevelBonus);
     this.state = {
       summoner: {
         x: GAME_WIDTH / 2,
         y: GAME_HEIGHT / 2,
         radius: BALANCE.summoner.radius,
-        hp: 100,
-        maxHp: 100,
+        hp: maxHp,
+        maxHp,
         shield: 0,
+        moveSpeedMultiplier: this.growthBonuses.moveSpeedMultiplier,
+        xpMultiplier: this.growthBonuses.xpMultiplier,
         level: 1,
         xp: 0,
         xpToNext: BALANCE.summoner.baseXpToNext,
-        pickupRadius: BALANCE.summoner.pickupRadius,
+        pickupRadius: BALANCE.summoner.pickupRadius + this.growthBonuses.pickupRadiusBonus,
         kills: 0,
+        hitFlashUntil: 0,
         upgradeChoices: [],
         upgradePaused: false
       },
       enemies: this.entities.enemies,
-      pets: [this.createPet('saberWolf', 1)],
+      pets: [this.createPet('saberWolf', 1, startingPetLevel)],
       gems: this.entities.gems,
       damageEvents: [],
       reactionEvents: [],
@@ -57,7 +68,11 @@ export class GameSimulation {
         spawned: 0,
         reactions: 0
       },
-      reactionDamageMultiplier: 1
+      reactionDamageMultiplier: this.growthBonuses.reactionDamageMultiplier,
+      soulCrystalMultiplier: this.growthBonuses.soulCrystalMultiplier,
+      runStatus: 'playing',
+      runSettled: false,
+      lastRunResult: null
     };
 
     if (options.initialEnemies > 0) {
@@ -65,11 +80,13 @@ export class GameSimulation {
     }
   }
 
-  public static create(): GameSimulation {
+  public static create(options: Pick<GameSimulationOptions, 'saveData'> = {}): GameSimulation {
     return new GameSimulation({
       autoSpawn: true,
       initialEnemies: 0,
-      combatEnabled: true
+      combatEnabled: true,
+      playerDamageEnabled: true,
+      saveData: options.saveData
     });
   }
 
@@ -77,15 +94,18 @@ export class GameSimulation {
     return new GameSimulation({
       autoSpawn: true,
       initialEnemies: 200,
-      combatEnabled: false
+      combatEnabled: false,
+      playerDamageEnabled: false
     });
   }
 
-  public static createForTest(): GameSimulation {
+  public static createForTest(options: Pick<GameSimulationOptions, 'saveData'> = {}): GameSimulation {
     return new GameSimulation({
       autoSpawn: false,
       initialEnemies: 0,
-      combatEnabled: true
+      combatEnabled: true,
+      playerDamageEnabled: true,
+      saveData: options.saveData
     });
   }
 
@@ -93,7 +113,8 @@ export class GameSimulation {
     const simulation = new GameSimulation({
       autoSpawn: false,
       initialEnemies: 0,
-      combatEnabled: true
+      combatEnabled: true,
+      playerDamageEnabled: false
     });
     simulation.addAllPetsForTest();
     simulation.spawnEnemyForTest(220, 320, 180);
@@ -106,13 +127,18 @@ export class GameSimulation {
     const simulation = new GameSimulation({
       autoSpawn: false,
       initialEnemies: 0,
-      combatEnabled: true
+      combatEnabled: true,
+      playerDamageEnabled: false
     });
     simulation.spawnGemForTest(simulation.state.summoner.x, simulation.state.summoner.y, BALANCE.summoner.baseXpToNext);
     return simulation;
   }
 
   public update(deltaSeconds: number): void {
+    if (this.state.runStatus === 'gameOver') {
+      return;
+    }
+
     if (this.state.summoner.upgradePaused) {
       return;
     }
@@ -131,9 +157,43 @@ export class GameSimulation {
       this.combatSystem.update(this.state, this.entities, deltaSeconds);
     }
 
-    this.enemySystem.update(this.state, deltaSeconds);
+    this.enemySystem.update(this.state, deltaSeconds, this.options.playerDamageEnabled);
     this.elementSystem.update(this.state, deltaSeconds, this.state.stats.runtime);
     this.xpSystem.update(this.state, this.entities, deltaSeconds);
+  }
+
+  public settleRun(saveData: SaveData): RunResult {
+    if (this.state.runStatus !== 'gameOver' || this.state.runSettled) {
+      return {
+        kills: this.state.summoner.kills,
+        runtime: this.state.stats.runtime,
+        reactions: this.state.stats.reactions,
+        soulCrystals: 0,
+        totalSoulCrystals: saveData.soulCrystals
+      };
+    }
+
+    const rewardBase =
+      Math.floor(this.state.summoner.kills / 4) +
+      Math.floor(this.state.stats.runtime / 60) +
+      Math.floor(this.state.stats.reactions / 3) +
+      1;
+    const soulCrystals = Math.max(1, Math.floor(rewardBase * this.state.soulCrystalMultiplier));
+    saveData.soulCrystals += soulCrystals;
+    saveData.runs += 1;
+    saveData.bestKills = Math.max(saveData.bestKills, this.state.summoner.kills);
+    saveData.bestTime = Math.max(saveData.bestTime, Math.floor(this.state.stats.runtime));
+
+    const result: RunResult = {
+      kills: this.state.summoner.kills,
+      runtime: this.state.stats.runtime,
+      reactions: this.state.stats.reactions,
+      soulCrystals,
+      totalSoulCrystals: saveData.soulCrystals
+    };
+    this.state.runSettled = true;
+    this.state.lastRunResult = result;
+    return result;
   }
 
   public chooseUpgrade(choiceId: string): void {
@@ -195,7 +255,7 @@ export class GameSimulation {
     }
   }
 
-  private createPet(petId: PetId, id: number): Pet {
+  private createPet(petId: PetId, id: number, level: number): Pet {
     const definition = getPetDefinition(petId);
     return {
       id,
@@ -203,7 +263,7 @@ export class GameSimulation {
       active: true,
       x: GAME_WIDTH / 2,
       y: GAME_HEIGHT / 2,
-      level: 1,
+      level,
       range: definition.range,
       damage: definition.damage,
       attackCooldown: definition.cooldown,
@@ -213,4 +273,16 @@ export class GameSimulation {
       targetId: null
     };
   }
+}
+
+function getDefaultBonuses(): GrowthBonuses {
+  return {
+    maxHpBonus: 0,
+    moveSpeedMultiplier: 1,
+    xpMultiplier: 1,
+    pickupRadiusBonus: 0,
+    startingPetLevelBonus: 0,
+    reactionDamageMultiplier: 1,
+    soulCrystalMultiplier: 1
+  };
 }

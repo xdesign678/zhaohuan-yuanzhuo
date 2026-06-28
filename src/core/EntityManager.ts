@@ -26,7 +26,8 @@ export class EntityManager {
       slowUntil: 0,
       slowMultiplier: 1,
       defenseBreakUntil: 0,
-      damageTakenMultiplier: 1
+      damageTakenMultiplier: 1,
+      contactCooldownRemaining: 0
     }),
     (enemy) => {
       enemy.active = true;
@@ -74,6 +75,7 @@ export class EntityManager {
     enemy.slowMultiplier = 1;
     enemy.defenseBreakUntil = 0;
     enemy.damageTakenMultiplier = 1;
+    enemy.contactCooldownRemaining = 0;
     return enemy;
   }
 

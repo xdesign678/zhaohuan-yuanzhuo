@@ -7,6 +7,8 @@ export const BALANCE = {
     baseHp: 14,
     baseSpeed: 36,
     xpValue: 12,
+    contactDamage: 7,
+    contactInterval: 0.45,
     softCap: 200,
     spawnInterval: 0.32
   },
