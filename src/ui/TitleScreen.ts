@@ -1,5 +1,6 @@
 import { GROWTH_DEFS, GROWTH_NODE_IDS, type GrowthNodeId } from '../data/GrowthDefs';
 import type { SaveData } from '../storage/SaveManager';
+import { bindPress } from './Press';
 
 interface TitleScreenCallbacks {
   readonly onStart: () => void;
@@ -34,7 +35,7 @@ export class TitleScreen {
     startButton.className = 'primary-action';
     startButton.type = 'button';
     startButton.textContent = '开始';
-    startButton.addEventListener('click', () => this.callbacks.onStart());
+    bindPress(startButton, () => this.callbacks.onStart());
 
     this.growthList = document.createElement('div');
     this.growthList.className = 'growth-list';
@@ -79,7 +80,7 @@ export class TitleScreen {
       detail.textContent = cost === undefined ? definition.description : `${definition.description} · ${cost}魂晶`;
 
       button.append(name, detail);
-      button.addEventListener('click', () => this.callbacks.onBuyGrowth(id));
+      bindPress(button, () => this.callbacks.onBuyGrowth(id));
       this.growthList.append(button);
     }
   }

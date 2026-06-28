@@ -4,7 +4,7 @@ import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const devUrl = process.env.M5_DEV_URL ?? 'http://localhost:5173/?m4autostart=1&m5low=1';
+const devStartUrl = process.env.M5_DEV_START_URL ?? 'http://localhost:5173/?m5low=1';
 const prodPort = Number(process.env.M5_PROD_PORT ?? 4175);
 const prodUrl = `http://127.0.0.1:${prodPort}/`;
 const debugPort = Number(process.env.M5_DEBUG_PORT ?? 9338);
@@ -84,6 +84,27 @@ async function waitForPageTarget(timeoutMs = 8000) {
 async function navigate(client, url) {
   await client.send('Page.navigate', { url });
   await waitForValue(client, 'document.readyState === "complete" ? true : null');
+}
+
+async function tapSelector(client, selector) {
+  const rect = await waitForValue(
+    client,
+    `(() => {
+      const node = document.querySelector(${JSON.stringify(selector)});
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`
+  );
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: rect.x, y: rect.y, id: 1, radiusX: 8, radiusY: 8, force: 1 }]
+  });
+  await delay(120);
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: []
+  });
 }
 
 function createStaticServer() {
@@ -168,12 +189,14 @@ async function main() {
     });
     await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 
-    await navigate(client, devUrl);
+    await navigate(client, devStartUrl);
+    await tapSelector(client, '.title-screen:not(.hidden) .primary-action');
     const lowSnapshot = await waitForValue(
       client,
       `(() => {
         const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM5Snapshot?.();
-        return snapshot?.deviceTier === 'low' && snapshot.audioUnlocked && snapshot.enemySoftCap === 120 && snapshot.targetFps === 24
+        const titleVisible = Boolean(document.querySelector('.title-screen:not(.hidden)'));
+        return !titleVisible && snapshot?.deviceTier === 'low' && snapshot.audioUnlocked && snapshot.enemySoftCap === 120 && snapshot.targetFps === 24
           ? snapshot
           : null;
       })()`

@@ -1,5 +1,6 @@
 import type { RunResult } from '../entities/GameTypes';
 import type { SaveData } from '../storage/SaveManager';
+import { bindPress } from './Press';
 
 interface ResultPanelCallbacks {
   readonly onRetry: () => void;
@@ -29,13 +30,13 @@ export class ResultPanel {
     retry.type = 'button';
     retry.className = 'primary-action';
     retry.textContent = '再来一局';
-    retry.addEventListener('click', () => this.callbacks.onRetry());
+    bindPress(retry, () => this.callbacks.onRetry());
 
     const titleButton = document.createElement('button');
     titleButton.type = 'button';
     titleButton.className = 'secondary-action';
     titleButton.textContent = '成长';
-    titleButton.addEventListener('click', () => this.callbacks.onTitle());
+    bindPress(titleButton, () => this.callbacks.onTitle());
 
     actions.append(retry, titleButton);
     this.root.append(this.title, this.stats, actions);
