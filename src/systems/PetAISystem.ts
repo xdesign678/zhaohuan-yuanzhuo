@@ -1,4 +1,5 @@
 import { SpatialGrid } from '../core/SpatialGrid';
+import { HUNT_MARK_DURATION } from '../data/SynergyDefs';
 import type { DamageEvent, Enemy, GameState } from '../entities/GameTypes';
 
 export class PetAISystem {
@@ -14,10 +15,18 @@ export class PetAISystem {
         continue;
       }
 
-      pet.x = summoner.x + 34;
-      pet.y = summoner.y - 28;
+      this.placePet(state, pet.id - 1);
       pet.cooldownRemaining = Math.max(0, pet.cooldownRemaining - deltaSeconds);
       pet.targetScanTimer -= deltaSeconds;
+
+      if (pet.definition.behavior === 'heal-shield') {
+        if (pet.cooldownRemaining <= 0) {
+          summoner.hp = Math.min(summoner.maxHp, summoner.hp + 3 + pet.level);
+          summoner.shield = Math.min(40, summoner.shield + 4 + pet.level * 2);
+          pet.cooldownRemaining = pet.attackCooldown;
+        }
+        continue;
+      }
 
       const lockedTarget = this.findActiveEnemy(state.enemies, pet.targetId);
       if (!lockedTarget || !this.isInRange(pet.x, pet.y, lockedTarget.x, lockedTarget.y, pet.range)) {
@@ -30,13 +39,64 @@ export class PetAISystem {
       }
 
       if (pet.targetId !== null && pet.cooldownRemaining <= 0) {
-        state.damageEvents.push({
-          enemyId: pet.targetId,
-          amount: pet.damage + (pet.level - 1) * 2
-        } satisfies DamageEvent);
+        const target = this.findActiveEnemy(state.enemies, pet.targetId);
+        if (target) {
+          this.attack(state, pet, target);
+        }
         pet.cooldownRemaining = pet.attackCooldown;
       }
     }
+  }
+
+  private attack(state: GameState, pet: GameState['pets'][number], target: Enemy): void {
+    const baseDamage = pet.damage + (pet.level - 1) * 2;
+    if (pet.definition.behavior === 'melee-mark') {
+      target.huntMarkUntil = state.stats.runtime + HUNT_MARK_DURATION;
+      this.pushDamage(state, target, baseDamage, undefined, pet.definition.id, false);
+      return;
+    }
+
+    if (pet.definition.behavior === 'fire-aoe') {
+      this.pushDamage(state, target, baseDamage, 'fire', pet.definition.id, true);
+      const radius = pet.level >= 3 ? 54 : 38;
+      this.enemyGrid.queryCircleInto(target.x, target.y, radius, this.candidates);
+      for (const enemy of this.candidates) {
+        if (enemy.active && enemy.id !== target.id) {
+          this.pushDamage(state, enemy, Math.max(2, Math.floor(baseDamage * 0.55)), 'fire', pet.definition.id, false);
+        }
+      }
+      return;
+    }
+
+    if (pet.definition.behavior === 'ice-slow') {
+      target.slowUntil = state.stats.runtime + 2;
+      target.slowMultiplier = pet.level >= 3 ? 0.55 : 0.7;
+      this.pushDamage(state, target, baseDamage, 'ice', pet.definition.id, true);
+      return;
+    }
+
+    if (pet.definition.behavior === 'lightning-chain') {
+      const chainCount = 2 + (pet.level >= 3 ? 1 : 0) + (pet.level >= 5 ? 1 : 0);
+      this.enemyGrid.queryCircleInto(target.x, target.y, pet.range, this.candidates);
+      let hits = 0;
+      for (const enemy of this.candidates) {
+        if (!enemy.active || hits >= chainCount) {
+          continue;
+        }
+        this.pushDamage(state, enemy, Math.max(2, Math.floor(baseDamage * (hits === 0 ? 1 : 0.72))), 'lightning', pet.definition.id, hits === 0);
+        hits += 1;
+      }
+    }
+  }
+
+  private pushDamage(state: GameState, enemy: Enemy, amount: number, element: DamageEvent['element'], sourcePetId: string, canTriggerReaction: boolean): void {
+    state.damageEvents.push({
+      enemyId: enemy.id,
+      amount,
+      element,
+      canTriggerReaction,
+      sourcePetId
+    });
   }
 
   private findNearestTargetId(x: number, y: number, range: number): number | null {
@@ -79,5 +139,17 @@ export class PetAISystem {
     const dx = toX - fromX;
     const dy = toY - fromY;
     return dx * dx + dy * dy <= range * range;
+  }
+
+  private placePet(state: GameState, index: number): void {
+    const pet = state.pets[index];
+    if (!pet) {
+      return;
+    }
+
+    const angle = -Math.PI / 2 + index * ((Math.PI * 2) / Math.max(5, state.pets.length));
+    const radius = 42;
+    pet.x = state.summoner.x + Math.cos(angle) * radius;
+    pet.y = state.summoner.y + Math.sin(angle) * radius;
   }
 }

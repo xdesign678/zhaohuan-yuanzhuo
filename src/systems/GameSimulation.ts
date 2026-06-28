@@ -1,11 +1,14 @@
 import { EntityManager } from '../core/EntityManager';
 import { SpatialGrid } from '../core/SpatialGrid';
 import { BALANCE, GAME_HEIGHT, GAME_WIDTH } from '../data/Balance';
-import type { Enemy, GameState } from '../entities/GameTypes';
+import { getPetDefinition, PET_DEFS, type PetId } from '../data/PetDefs';
+import type { Enemy, GameState, Pet } from '../entities/GameTypes';
 import { CombatSystem } from './CombatSystem';
+import { ElementSystem } from './ElementSystem';
 import { EnemySystem } from './EnemySystem';
 import { PetAISystem } from './PetAISystem';
 import { SpawnSystem } from './SpawnSystem';
+import { UpgradeSystem } from './UpgradeSystem';
 import { XPSystem } from './XPSystem';
 
 interface GameSimulationOptions {
@@ -22,8 +25,10 @@ export class GameSimulation {
   private readonly spawnSystem = new SpawnSystem();
   private readonly enemySystem = new EnemySystem();
   private readonly petSystem = new PetAISystem(this.enemyGrid);
-  private readonly combatSystem = new CombatSystem();
-  private readonly xpSystem = new XPSystem();
+  private readonly elementSystem = new ElementSystem();
+  private readonly upgradeSystem = new UpgradeSystem();
+  private readonly combatSystem = new CombatSystem(this.elementSystem);
+  private readonly xpSystem = new XPSystem(this.upgradeSystem);
 
   private constructor(private readonly options: GameSimulationOptions) {
     this.state = {
@@ -33,35 +38,26 @@ export class GameSimulation {
         radius: BALANCE.summoner.radius,
         hp: 100,
         maxHp: 100,
+        shield: 0,
         level: 1,
         xp: 0,
         xpToNext: BALANCE.summoner.baseXpToNext,
         pickupRadius: BALANCE.summoner.pickupRadius,
-        kills: 0
+        kills: 0,
+        upgradeChoices: [],
+        upgradePaused: false
       },
       enemies: this.entities.enemies,
-      pets: [
-        {
-          id: 1,
-          active: true,
-          x: GAME_WIDTH / 2 + 34,
-          y: GAME_HEIGHT / 2 - 28,
-          level: 1,
-          range: BALANCE.pet.range,
-          damage: BALANCE.pet.damage,
-          attackCooldown: BALANCE.pet.attackCooldown,
-          cooldownRemaining: 0,
-          targetScanTimer: 0,
-          targetScanInterval: BALANCE.pet.targetScanInterval,
-          targetId: null
-        }
-      ],
+      pets: [this.createPet('saberWolf', 1)],
       gems: this.entities.gems,
       damageEvents: [],
+      reactionEvents: [],
       stats: {
         runtime: 0,
-        spawned: 0
-      }
+        spawned: 0,
+        reactions: 0
+      },
+      reactionDamageMultiplier: 1
     };
 
     if (options.initialEnemies > 0) {
@@ -93,8 +89,36 @@ export class GameSimulation {
     });
   }
 
+  public static createForM2Gate(): GameSimulation {
+    const simulation = new GameSimulation({
+      autoSpawn: false,
+      initialEnemies: 0,
+      combatEnabled: true
+    });
+    simulation.addAllPetsForTest();
+    simulation.spawnEnemyForTest(220, 320, 180);
+    simulation.spawnEnemyForTest(240, 330, 120);
+    simulation.spawnEnemyForTest(250, 300, 120);
+    return simulation;
+  }
+
+  public static createForUpgradeGate(): GameSimulation {
+    const simulation = new GameSimulation({
+      autoSpawn: false,
+      initialEnemies: 0,
+      combatEnabled: true
+    });
+    simulation.spawnGemForTest(simulation.state.summoner.x, simulation.state.summoner.y, BALANCE.summoner.baseXpToNext);
+    return simulation;
+  }
+
   public update(deltaSeconds: number): void {
+    if (this.state.summoner.upgradePaused) {
+      return;
+    }
+
     this.state.stats.runtime += deltaSeconds;
+    this.elementSystem.beginFrame();
 
     if (this.options.autoSpawn) {
       this.spawnSystem.update(this.state, this.entities, deltaSeconds);
@@ -108,7 +132,25 @@ export class GameSimulation {
     }
 
     this.enemySystem.update(this.state, deltaSeconds);
+    this.elementSystem.update(this.state, deltaSeconds, this.state.stats.runtime);
     this.xpSystem.update(this.state, this.entities, deltaSeconds);
+  }
+
+  public chooseUpgrade(choiceId: string): void {
+    const choice = this.state.summoner.upgradeChoices.find((item) => item.id === choiceId);
+    if (choice) {
+      this.upgradeSystem.applyChoice(this.state, choice);
+    }
+  }
+
+  public addPetForTest(petId: PetId): void {
+    this.upgradeSystem.addPet(this.state, petId);
+  }
+
+  public addAllPetsForTest(): void {
+    for (const pet of PET_DEFS) {
+      this.upgradeSystem.addPet(this.state, pet.id);
+    }
   }
 
   public setSummonerPosition(x: number, y: number): void {
@@ -151,5 +193,24 @@ export class GameSimulation {
         this.enemyGrid.insert(enemy.x, enemy.y, enemy);
       }
     }
+  }
+
+  private createPet(petId: PetId, id: number): Pet {
+    const definition = getPetDefinition(petId);
+    return {
+      id,
+      definition,
+      active: true,
+      x: GAME_WIDTH / 2,
+      y: GAME_HEIGHT / 2,
+      level: 1,
+      range: definition.range,
+      damage: definition.damage,
+      attackCooldown: definition.cooldown,
+      cooldownRemaining: 0,
+      targetScanTimer: 0,
+      targetScanInterval: definition.targetScanInterval,
+      targetId: null
+    };
   }
 }

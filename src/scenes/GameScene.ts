@@ -4,16 +4,18 @@ import type { Enemy, Gem } from '../entities/GameTypes';
 import { GameSimulation } from '../systems/GameSimulation';
 import { DragMovementController } from '../ui/DragInput';
 import { HUD } from '../ui/HUD';
+import { UpgradePanel } from '../ui/UpgradePanel';
 
 const PLAYER_SIZE = 42;
 const PLAYER_SPEED = 520;
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Rectangle;
-  private petView!: Phaser.GameObjects.Rectangle;
   private movement!: DragMovementController;
   private simulation!: GameSimulation;
   private hud!: HUD;
+  private upgradePanel!: UpgradePanel;
+  private readonly petViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private readonly enemyViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private readonly gemViews = new Map<number, Phaser.GameObjects.Arc>();
   private readonly fpsSamples = new Array<number>(90).fill(60);
@@ -28,13 +30,12 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#09080d');
     this.createBackdrop();
 
-    this.simulation = this.isPerformanceGate() ? GameSimulation.createForPerformanceGate() : GameSimulation.create();
+    this.simulation = this.createSimulationFromUrl();
     const startX = this.simulation.state.summoner.x;
     const startY = this.simulation.state.summoner.y;
     this.player = this.add
       .rectangle(startX, startY, PLAYER_SIZE, PLAYER_SIZE, 0x78f2c4, 1)
       .setStrokeStyle(2, 0x16101f);
-    this.petView = this.add.rectangle(startX + 34, startY - 28, 22, 22, 0xf2d36b, 1).setStrokeStyle(2, 0x16101f);
 
     const halfSize = PLAYER_SIZE / 2;
     this.movement = new DragMovementController({
@@ -45,6 +46,9 @@ export class GameScene extends Phaser.Scene {
     });
     this.movement.snapTo({ x: startX, y: startY });
     this.hud = new HUD(document.body);
+    this.upgradePanel = new UpgradePanel(document.body, (choiceId) => {
+      this.simulation.chooseUpgrade(choiceId);
+    });
 
     this.input.addPointer(4);
     this.input.on('pointerdown', this.handlePointerDown, this);
@@ -67,6 +71,16 @@ export class GameScene extends Phaser.Scene {
       enemyCount: this.simulation.countActiveEnemies(),
       kills: this.simulation.state.summoner.kills,
       level: this.simulation.state.summoner.level,
+      fps: this.getAverageFps()
+    };
+  }
+
+  public getM2Snapshot(): { petCount: number; upgradeChoiceCount: number; reactions: number; petNames: string[]; fps: number } {
+    return {
+      petCount: this.simulation.state.pets.filter((pet) => pet.active).length,
+      upgradeChoiceCount: this.simulation.state.summoner.upgradeChoices.length,
+      reactions: this.simulation.state.stats.reactions,
+      petNames: this.simulation.state.pets.filter((pet) => pet.active).map((pet) => pet.definition.name),
       fps: this.getAverageFps()
     };
   }
@@ -96,16 +110,28 @@ export class GameScene extends Phaser.Scene {
     const state = this.simulation.state;
     this.player.setPosition(state.summoner.x, state.summoner.y);
 
-    const pet = state.pets[0];
-    if (pet?.active) {
-      this.petView.setVisible(true).setPosition(pet.x, pet.y);
-    } else {
-      this.petView.setVisible(false);
-    }
+    this.renderPets();
 
     this.renderEnemies(state.enemies);
     this.renderGems(state.gems);
     this.hud.update(state, this.simulation.countActiveEnemies(), this.getAverageFps());
+    this.upgradePanel.update(state.summoner.upgradeChoices);
+  }
+
+  private renderPets(): void {
+    for (const pet of this.simulation.state.pets) {
+      let view = this.petViews.get(pet.id);
+      if (!view) {
+        view = this.add.rectangle(pet.x, pet.y, 22, 22, pet.definition.color, 1).setStrokeStyle(2, 0x16101f);
+        this.petViews.set(pet.id, view);
+      }
+
+      view.setVisible(pet.active);
+      if (pet.active) {
+        view.setFillStyle(pet.definition.color, 1);
+        view.setPosition(pet.x, pet.y);
+      }
+    }
   }
 
   private renderEnemies(enemies: Enemy[]): void {
@@ -191,11 +217,22 @@ export class GameScene extends Phaser.Scene {
     pointer.event?.preventDefault();
   }
 
-  private isPerformanceGate(): boolean {
-    return new URLSearchParams(window.location.search).get('m1perf') === '1';
+  private createSimulationFromUrl(): GameSimulation {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('m1perf') === '1') {
+      return GameSimulation.createForPerformanceGate();
+    }
+    if (params.get('m2all') === '1') {
+      return GameSimulation.createForM2Gate();
+    }
+    if (params.get('m2upgrade') === '1') {
+      return GameSimulation.createForUpgradeGate();
+    }
+    return GameSimulation.create();
   }
 
   private destroyScene(): void {
     this.hud.destroy();
+    this.upgradePanel.destroy();
   }
 }

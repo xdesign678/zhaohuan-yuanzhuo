@@ -80,3 +80,61 @@ canvas {
   height: 100%;
   background: #5cd6ff;
 }
+
+.upgrade-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-content: center;
+  gap: 14px;
+  box-sizing: border-box;
+  padding: 24px;
+  background: rgb(5 4 8 / 72%);
+}
+
+.upgrade-panel.hidden {
+  display: none;
+}
+
+.upgrade-title {
+  color: #f3eefc;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 2px 2px #000;
+}
+
+.upgrade-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.upgrade-card {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 14px;
+  color: #f3eefc;
+  text-align: left;
+  background: #17121f;
+  border: 1px solid #4b3a63;
+  border-radius: 8px;
+  touch-action: manipulation;
+}
+
+.upgrade-card:active {
+  transform: translateY(1px);
+}
+
+.upgrade-card-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.upgrade-card-description {
+  color: #cfc6df;
+  font-size: 13px;
+  line-height: 1.3;
+}

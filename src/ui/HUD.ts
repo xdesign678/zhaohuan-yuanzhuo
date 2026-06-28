@@ -28,15 +28,18 @@ export class HUD {
 
   public update(state: GameState, activeEnemies: number, fps: number): void {
     const summoner = state.summoner;
-    const pet = state.pets[0];
     const minutes = Math.floor(state.stats.runtime / 60);
     const seconds = Math.floor(state.stats.runtime % 60)
       .toString()
       .padStart(2, '0');
     const xpPercent = summoner.xpToNext > 0 ? Math.min(100, (summoner.xp / summoner.xpToNext) * 100) : 0;
+    const petText = state.pets
+      .filter((pet) => pet.active)
+      .map((pet) => `${pet.definition.name}${pet.level}`)
+      .join('  ');
 
-    this.topLine.textContent = `${minutes}:${seconds}  Lv ${summoner.level}  Kill ${summoner.kills}  Enemy ${activeEnemies}  ${Math.round(fps)}fps`;
-    this.petLine.textContent = pet ? `剑齿狼 Lv ${pet.level}  DMG ${pet.damage + (pet.level - 1) * 2}` : '无宠物';
+    this.topLine.textContent = `${minutes}:${seconds}  Lv ${summoner.level}  Kill ${summoner.kills}  Enemy ${activeEnemies}  R ${state.stats.reactions}  ${Math.round(fps)}fps`;
+    this.petLine.textContent = petText || '无宠物';
     this.xpFill.style.width = `${xpPercent}%`;
   }
 

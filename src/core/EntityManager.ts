@@ -19,7 +19,14 @@ export class EntityManager {
       hp: BALANCE.enemy.baseHp,
       maxHp: BALANCE.enemy.baseHp,
       speed: BALANCE.enemy.baseSpeed,
-      xpValue: BALANCE.enemy.xpValue
+      xpValue: BALANCE.enemy.xpValue,
+      elementMarks: {},
+      huntMarkUntil: 0,
+      reactionCooldownUntil: 0,
+      slowUntil: 0,
+      slowMultiplier: 1,
+      defenseBreakUntil: 0,
+      damageTakenMultiplier: 1
     }),
     (enemy) => {
       enemy.active = true;
@@ -60,6 +67,13 @@ export class EntityManager {
     enemy.hp = hp;
     enemy.speed = speed;
     enemy.xpValue = xpValue;
+    enemy.elementMarks = {};
+    enemy.huntMarkUntil = 0;
+    enemy.reactionCooldownUntil = 0;
+    enemy.slowUntil = 0;
+    enemy.slowMultiplier = 1;
+    enemy.defenseBreakUntil = 0;
+    enemy.damageTakenMultiplier = 1;
     return enemy;
   }
 

@@ -1,9 +1,16 @@
 import { EntityManager } from '../core/EntityManager';
 import { BALANCE } from '../data/Balance';
 import type { GameState } from '../entities/GameTypes';
+import { UpgradeSystem } from './UpgradeSystem';
 
 export class XPSystem {
+  public constructor(private readonly upgradeSystem: UpgradeSystem) {}
+
   public update(state: GameState, entities: EntityManager, deltaSeconds: number): void {
+    if (state.summoner.upgradePaused) {
+      return;
+    }
+
     const summoner = state.summoner;
     const pickupRadiusSquared = summoner.pickupRadius * summoner.pickupRadius;
 
@@ -39,12 +46,8 @@ export class XPSystem {
       summoner.xp -= summoner.xpToNext;
       summoner.level += 1;
       summoner.xpToNext += 8;
-
-      for (const pet of state.pets) {
-        if (pet.active) {
-          pet.level = Math.min(5, pet.level + 1);
-        }
-      }
+      summoner.upgradeChoices = this.upgradeSystem.createChoices(state, summoner.level);
+      summoner.upgradePaused = true;
     }
   }
 }

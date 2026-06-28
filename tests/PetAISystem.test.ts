@@ -16,7 +16,7 @@ describe('GameSimulation pet AI', () => {
     expect(game.state.pets[0]?.targetId).toBe(first.id);
   });
 
-  it('kills an enemy, drops xp, and lets the summoner level', () => {
+  it('kills an enemy, drops xp, and opens a pet upgrade choice', () => {
     const game = GameSimulation.createForTest();
     game.spawnEnemyForTest(220, 320, 6);
 
@@ -24,6 +24,14 @@ describe('GameSimulation pet AI', () => {
 
     expect(game.state.summoner.kills).toBe(1);
     expect(game.state.summoner.level).toBe(2);
+    expect(game.state.summoner.upgradeChoices).toHaveLength(3);
+
+    const petLevelChoice = game.state.summoner.upgradeChoices.find((choice) => choice.type === 'pet-level');
+    if (!petLevelChoice) {
+      throw new Error('Expected pet-level choice');
+    }
+    game.chooseUpgrade(petLevelChoice.id);
+
     expect(game.state.pets[0]?.level).toBe(2);
   });
 
@@ -34,5 +42,21 @@ describe('GameSimulation pet AI', () => {
     game.update(0.05);
 
     expect(game.state.summoner.kills).toBe(0);
+  });
+
+  it('runs five pets together and triggers elemental reactions', () => {
+    const game = GameSimulation.createForM2Gate();
+
+    game.update(0.21);
+
+    expect(game.state.pets).toHaveLength(5);
+    expect(game.state.stats.reactions).toBeGreaterThan(0);
+    expect(game.state.pets.map((pet) => pet.definition.behavior)).toEqual([
+      'melee-mark',
+      'fire-aoe',
+      'ice-slow',
+      'lightning-chain',
+      'heal-shield'
+    ]);
   });
 });

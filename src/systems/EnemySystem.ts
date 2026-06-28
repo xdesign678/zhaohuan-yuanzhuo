@@ -18,7 +18,8 @@ export class EnemySystem {
       }
 
       const distance = Math.sqrt(distanceSquared);
-      const step = enemy.speed * deltaSeconds;
+      const speedMultiplier = enemy.slowUntil > state.stats.runtime ? enemy.slowMultiplier : 1;
+      const step = enemy.speed * speedMultiplier * deltaSeconds;
       enemy.x += (dx / distance) * step;
       enemy.y += (dy / distance) * step;
     }

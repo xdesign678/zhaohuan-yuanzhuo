@@ -1,8 +1,11 @@
 import { EntityManager } from '../core/EntityManager';
 import type { GameState } from '../entities/GameTypes';
+import { ElementSystem } from './ElementSystem';
 
 export class CombatSystem {
   private tickAccumulator = 0;
+
+  public constructor(private readonly elementSystem: ElementSystem) {}
 
   public update(state: GameState, entities: EntityManager, deltaSeconds: number): void {
     this.tickAccumulator += deltaSeconds;
@@ -18,7 +21,13 @@ export class CombatSystem {
         continue;
       }
 
-      enemy.hp -= damage.amount;
+      enemy.hp -= damage.amount * enemy.damageTakenMultiplier;
+      if (damage.element) {
+        this.elementSystem.applyElement(state, enemy, damage.element, state.stats.runtime, {
+          canTriggerReaction: damage.canTriggerReaction
+        });
+      }
+
       if (enemy.hp > 0) {
         continue;
       }
