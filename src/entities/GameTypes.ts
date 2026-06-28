@@ -1,6 +1,7 @@
 import type { ElementType, PetDefinition } from '../data/PetDefs';
 import type { ReactionType } from '../data/SynergyDefs';
 import type { UpgradeChoice } from '../data/UpgradeDefs';
+import type { PerformanceSettings } from '../utils/DeviceDetect';
 
 export interface Summoner {
   x: number;
@@ -109,6 +110,7 @@ export interface GameState {
   damageEvents: DamageEvent[];
   reactionEvents: ReactionEvent[];
   stats: GameStats;
+  performance: PerformanceSettings;
   reactionDamageMultiplier: number;
   soulCrystalMultiplier: number;
   runStatus: 'playing' | 'gameOver';

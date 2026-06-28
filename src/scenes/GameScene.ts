@@ -13,6 +13,8 @@ import { ResultPanel } from '../ui/ResultPanel';
 import { TitleScreen } from '../ui/TitleScreen';
 import { UpgradePanel } from '../ui/UpgradePanel';
 import { AssetKeys } from '../utils/AssetKeys';
+import { createPerformanceSettings, detectBrowserProbe, type DeviceTier, type PerformanceSettings } from '../utils/DeviceDetect';
+import { SfxrAudio } from '../utils/SfxrAudio';
 
 const PLAYER_SIZE = 42;
 const PLAYER_SPEED = 520;
@@ -23,6 +25,7 @@ export class GameScene extends Phaser.Scene {
   private simulation!: GameSimulation;
   private saveManager!: SaveManager;
   private saveData!: SaveData;
+  private performanceSettings!: PerformanceSettings;
   private hud!: HUD;
   private titleScreen!: TitleScreen;
   private resultPanel!: ResultPanel;
@@ -37,6 +40,12 @@ export class GameScene extends Phaser.Scene {
   private lastSummonerX = GAME_WIDTH / 2;
   private isPlaying = false;
   private saveFallbackUsed = false;
+  private visibleEnemySprites = 0;
+  private visibleGemSprites = 0;
+  private readonly audio = new SfxrAudio();
+  private lastSoundLevel = 1;
+  private lastSoundReactions = 0;
+  private lastSoundHp = 100;
 
   public constructor() {
     super('GameScene');
@@ -55,6 +64,7 @@ export class GameScene extends Phaser.Scene {
     const loadedSave = this.saveManager.load();
     this.saveData = loadedSave.data;
     this.saveFallbackUsed = loadedSave.usedFallback;
+    this.performanceSettings = this.createPerformanceSettingsFromUrl();
     this.simulation = this.createSimulationFromUrl(this.saveData);
     const startX = this.simulation.state.summoner.x;
     const startY = this.simulation.state.summoner.y;
@@ -121,6 +131,7 @@ export class GameScene extends Phaser.Scene {
 
     this.moveSummoner(delta);
     this.simulation.update(delta / 1000);
+    this.playStateFeedback();
     if (this.simulation.state.runStatus === 'gameOver') {
       this.finishRun();
     }
@@ -168,6 +179,9 @@ export class GameScene extends Phaser.Scene {
     persistedRuns: number;
     hp: number;
     shield: number;
+    deviceTier: DeviceTier;
+    targetFps: number;
+    enemySoftCap: number;
   } {
     return {
       titleVisible: this.titleScreen.isVisible(),
@@ -180,7 +194,32 @@ export class GameScene extends Phaser.Scene {
       lastRunSoulCrystals: this.simulation.state.lastRunResult?.soulCrystals ?? 0,
       persistedRuns: this.saveData.runs,
       hp: this.simulation.state.summoner.hp,
-      shield: this.simulation.state.summoner.shield
+      shield: this.simulation.state.summoner.shield,
+      deviceTier: this.simulation.state.performance.tier,
+      targetFps: this.simulation.state.performance.targetFps,
+      enemySoftCap: this.simulation.state.performance.enemySoftCap
+    };
+  }
+
+  public getM5Snapshot(): {
+    deviceTier: DeviceTier;
+    targetFps: number;
+    enemySoftCap: number;
+    audioUnlocked: boolean;
+    visibleEnemySprites: number;
+    visibleGemSprites: number;
+    activeEnemies: number;
+    renderPadding: number;
+  } {
+    return {
+      deviceTier: this.simulation.state.performance.tier,
+      targetFps: this.simulation.state.performance.targetFps,
+      enemySoftCap: this.simulation.state.performance.enemySoftCap,
+      audioUnlocked: this.audio.isUnlocked(),
+      visibleEnemySprites: this.visibleEnemySprites,
+      visibleGemSprites: this.visibleGemSprites,
+      activeEnemies: this.simulation.countActiveEnemies(),
+      renderPadding: this.simulation.state.performance.renderPadding
     };
   }
 
@@ -246,6 +285,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderEnemies(enemies: Enemy[]): void {
+    this.visibleEnemySprites = 0;
     for (const enemy of enemies) {
       let view = this.enemyViews.get(enemy.id);
       if (!view) {
@@ -253,8 +293,10 @@ export class GameScene extends Phaser.Scene {
         this.enemyViews.set(enemy.id, view);
       }
 
-      view.setVisible(enemy.active);
-      if (enemy.active) {
+      const visible = enemy.active && this.isInsideRenderBounds(enemy.x, enemy.y);
+      view.setVisible(visible);
+      if (visible) {
+        this.visibleEnemySprites += 1;
         const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
         view.setFrame(this.frameForEnemy(enemy));
         if (hpRatio <= 0.5) {
@@ -269,6 +311,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderGems(gems: Gem[]): void {
+    this.visibleGemSprites = 0;
     for (const gem of gems) {
       let view = this.gemViews.get(gem.id);
       if (!view) {
@@ -276,8 +319,10 @@ export class GameScene extends Phaser.Scene {
         this.gemViews.set(gem.id, view);
       }
 
-      view.setVisible(gem.active);
-      if (gem.active) {
+      const visible = gem.active && this.isInsideRenderBounds(gem.x, gem.y);
+      view.setVisible(visible);
+      if (visible) {
+        this.visibleGemSprites += 1;
         view.setPosition(gem.x, gem.y);
       }
     }
@@ -343,7 +388,7 @@ export class GameScene extends Phaser.Scene {
     if (params.get('m2upgrade') === '1') {
       return GameSimulation.createForUpgradeGate();
     }
-    return GameSimulation.create({ saveData });
+    return GameSimulation.create({ saveData, performanceSettings: this.performanceSettings });
   }
 
   private destroyScene(): void {
@@ -367,6 +412,11 @@ export class GameScene extends Phaser.Scene {
   private startRun(): void {
     this.simulation = this.createSimulationFromUrl(this.saveData);
     this.syncPlayerToSimulation();
+    this.lastSoundLevel = this.simulation.state.summoner.level;
+    this.lastSoundReactions = this.simulation.state.stats.reactions;
+    this.lastSoundHp = this.simulation.state.summoner.hp;
+    this.audio.unlock();
+    this.audio.play('pickup');
     this.titleScreen.hide();
     this.resultPanel.hide();
     this.isPlaying = true;
@@ -375,7 +425,7 @@ export class GameScene extends Phaser.Scene {
 
   private showTitle(): void {
     this.isPlaying = false;
-    this.simulation = GameSimulation.create({ saveData: this.saveData });
+    this.simulation = GameSimulation.create({ saveData: this.saveData, performanceSettings: this.performanceSettings });
     this.syncPlayerToSimulation();
     this.resultPanel.hide();
     this.titleScreen.show(this.saveData, this.saveFallbackUsed);
@@ -398,6 +448,8 @@ export class GameScene extends Phaser.Scene {
     this.saveManager.save(this.saveData);
     this.isPlaying = false;
     this.upgradePanel.update([]);
+    this.audio.play('gameOver');
+    this.vibrate([35, 35, 80]);
     this.resultPanel.show(result, this.saveData);
   }
 
@@ -422,5 +474,43 @@ export class GameScene extends Phaser.Scene {
     this.movement.snapTo({ x: summoner.x, y: summoner.y });
     this.player.setPosition(summoner.x, summoner.y);
     this.lastSummonerX = summoner.x;
+  }
+
+  private createPerformanceSettingsFromUrl(): PerformanceSettings {
+    const params = new URLSearchParams(window.location.search);
+    const forcedTier: DeviceTier | undefined = params.get('m5low') === '1' ? 'low' : undefined;
+    return createPerformanceSettings(forcedTier ? { ...detectBrowserProbe(), forcedTier } : detectBrowserProbe());
+  }
+
+  private isInsideRenderBounds(x: number, y: number): boolean {
+    const padding = this.simulation.state.performance.renderPadding;
+    return x >= -padding && x <= GAME_WIDTH + padding && y >= -padding && y <= GAME_HEIGHT + padding;
+  }
+
+  private playStateFeedback(): void {
+    const state = this.simulation.state;
+    if (state.summoner.level > this.lastSoundLevel) {
+      this.audio.play('levelUp');
+      this.vibrate([30, 24, 30]);
+      this.lastSoundLevel = state.summoner.level;
+    }
+
+    if (state.stats.reactions > this.lastSoundReactions) {
+      this.audio.play('reaction');
+      this.vibrate(24);
+      this.lastSoundReactions = state.stats.reactions;
+    }
+
+    if (state.summoner.hp < this.lastSoundHp) {
+      this.audio.play('hit');
+      this.vibrate(35);
+      this.lastSoundHp = state.summoner.hp;
+    }
+  }
+
+  private vibrate(pattern: number | number[]): void {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
   }
 }

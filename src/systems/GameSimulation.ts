@@ -12,6 +12,7 @@ import { PetAISystem } from './PetAISystem';
 import { SpawnSystem } from './SpawnSystem';
 import { UpgradeSystem } from './UpgradeSystem';
 import { XPSystem } from './XPSystem';
+import { createPerformanceSettings, type PerformanceSettings } from '../utils/DeviceDetect';
 
 interface GameSimulationOptions {
   readonly autoSpawn: boolean;
@@ -19,6 +20,7 @@ interface GameSimulationOptions {
   readonly combatEnabled: boolean;
   readonly playerDamageEnabled: boolean;
   readonly saveData?: SaveData;
+  readonly performanceSettings?: PerformanceSettings;
 }
 
 export class GameSimulation {
@@ -34,9 +36,11 @@ export class GameSimulation {
   private readonly upgradeSystem = new UpgradeSystem();
   private readonly combatSystem = new CombatSystem(this.elementSystem);
   private readonly xpSystem = new XPSystem(this.upgradeSystem);
+  private readonly performanceSettings: PerformanceSettings;
 
   private constructor(private readonly options: GameSimulationOptions) {
     this.growthBonuses = options.saveData ? getGrowthBonuses(options.saveData) : getDefaultBonuses();
+    this.performanceSettings = options.performanceSettings ?? createPerformanceSettings();
     const maxHp = 100 + this.growthBonuses.maxHpBonus;
     const startingPetLevel = Math.min(5, 1 + this.growthBonuses.startingPetLevelBonus);
     this.state = {
@@ -68,6 +72,7 @@ export class GameSimulation {
         spawned: 0,
         reactions: 0
       },
+      performance: this.performanceSettings,
       reactionDamageMultiplier: this.growthBonuses.reactionDamageMultiplier,
       soulCrystalMultiplier: this.growthBonuses.soulCrystalMultiplier,
       runStatus: 'playing',
@@ -80,13 +85,14 @@ export class GameSimulation {
     }
   }
 
-  public static create(options: Pick<GameSimulationOptions, 'saveData'> = {}): GameSimulation {
+  public static create(options: Pick<GameSimulationOptions, 'saveData' | 'performanceSettings'> = {}): GameSimulation {
     return new GameSimulation({
       autoSpawn: true,
       initialEnemies: 0,
       combatEnabled: true,
       playerDamageEnabled: true,
-      saveData: options.saveData
+      saveData: options.saveData,
+      performanceSettings: options.performanceSettings
     });
   }
 
@@ -95,17 +101,19 @@ export class GameSimulation {
       autoSpawn: true,
       initialEnemies: 200,
       combatEnabled: false,
-      playerDamageEnabled: false
+      playerDamageEnabled: false,
+      performanceSettings: createPerformanceSettings({ forcedTier: 'high' })
     });
   }
 
-  public static createForTest(options: Pick<GameSimulationOptions, 'saveData'> = {}): GameSimulation {
+  public static createForTest(options: Pick<GameSimulationOptions, 'saveData' | 'performanceSettings'> = {}): GameSimulation {
     return new GameSimulation({
       autoSpawn: false,
       initialEnemies: 0,
       combatEnabled: true,
       playerDamageEnabled: true,
-      saveData: options.saveData
+      saveData: options.saveData,
+      performanceSettings: options.performanceSettings
     });
   }
 
@@ -114,7 +122,8 @@ export class GameSimulation {
       autoSpawn: false,
       initialEnemies: 0,
       combatEnabled: true,
-      playerDamageEnabled: false
+      playerDamageEnabled: false,
+      performanceSettings: createPerformanceSettings({ forcedTier: 'high' })
     });
     simulation.addAllPetsForTest();
     simulation.spawnEnemyForTest(220, 320, 180);
@@ -128,7 +137,8 @@ export class GameSimulation {
       autoSpawn: false,
       initialEnemies: 0,
       combatEnabled: true,
-      playerDamageEnabled: false
+      playerDamageEnabled: false,
+      performanceSettings: createPerformanceSettings({ forcedTier: 'high' })
     });
     simulation.spawnGemForTest(simulation.state.summoner.x, simulation.state.summoner.y, BALANCE.summoner.baseXpToNext);
     return simulation;

@@ -1,12 +1,15 @@
+import { createServer } from 'node:http';
+import { readFile, rm, stat } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
-import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const baseUrl = process.env.M4_URL ?? 'http://localhost:5173/';
-const debugPort = Number(process.env.M4_DEBUG_PORT ?? 9337);
-const userDataDir = `/tmp/zhaohuan-yuanzhuo-m4-chromium-${debugPort}`;
-const homeDir = `/tmp/zhaohuan-yuanzhuo-m4-chromium-home-${debugPort}`;
-const saveKey = 'summoner-survivor-save-v1';
+const devUrl = process.env.M5_DEV_URL ?? 'http://localhost:5173/?m4autostart=1&m5low=1';
+const prodPort = Number(process.env.M5_PROD_PORT ?? 4175);
+const prodUrl = `http://127.0.0.1:${prodPort}/`;
+const debugPort = Number(process.env.M5_DEBUG_PORT ?? 9338);
+const userDataDir = `/tmp/zhaohuan-yuanzhuo-m5-chromium-${debugPort}`;
+const homeDir = `/tmp/zhaohuan-yuanzhuo-m5-chromium-home-${debugPort}`;
 
 class CdpClient {
   constructor(socket) {
@@ -83,21 +86,48 @@ async function navigate(client, url) {
   await waitForValue(client, 'document.readyState === "complete" ? true : null');
 }
 
-function zeroGrowth() {
-  return {
-    vitality: 0,
-    swiftness: 0,
-    wisdom: 0,
-    magnet: 0,
-    bond: 0,
-    reaction: 0,
-    soulHarvest: 0
-  };
+function createStaticServer() {
+  const root = join(process.cwd(), 'dist');
+  const mimeTypes = new Map([
+    ['.html', 'text/html; charset=utf-8'],
+    ['.js', 'text/javascript; charset=utf-8'],
+    ['.css', 'text/css; charset=utf-8'],
+    ['.json', 'application/json; charset=utf-8'],
+    ['.png', 'image/png']
+  ]);
+
+  return createServer(async (request, response) => {
+    try {
+      const url = new URL(request.url ?? '/', prodUrl);
+      const requestPath = url.pathname === '/' ? '/index.html' : url.pathname;
+      const filePath = normalize(join(root, requestPath));
+      if (!filePath.startsWith(root)) {
+        response.writeHead(403);
+        response.end('Forbidden');
+        return;
+      }
+
+      await stat(filePath);
+      const body = await readFile(filePath);
+      response.writeHead(200, {
+        'content-type': mimeTypes.get(extname(filePath)) ?? 'application/octet-stream',
+        'cache-control': 'no-cache'
+      });
+      response.end(body);
+    } catch {
+      const body = await readFile(join(root, 'index.html'));
+      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      response.end(body);
+    }
+  });
 }
 
 async function main() {
   await rm(userDataDir, { recursive: true, force: true });
   await rm(homeDir, { recursive: true, force: true });
+
+  const staticServer = createStaticServer();
+  await new Promise((resolve) => staticServer.listen(prodPort, '127.0.0.1', resolve));
 
   const chromium = spawn(
     'xvfb-run',
@@ -126,6 +156,7 @@ async function main() {
       socket.addEventListener('open', resolve, { once: true });
       socket.addEventListener('error', reject, { once: true });
     });
+
     const client = new CdpClient(socket);
     await client.send('Page.enable');
     await client.send('Runtime.enable');
@@ -137,88 +168,38 @@ async function main() {
     });
     await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 
-    await navigate(client, baseUrl);
-    await client.send('Runtime.evaluate', { expression: 'localStorage.clear()', returnByValue: true });
-    await navigate(client, baseUrl);
-    const titleSnapshot = await waitForValue(
+    await navigate(client, devUrl);
+    const lowSnapshot = await waitForValue(
       client,
       `(() => {
-        const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM4Snapshot?.();
-        return snapshot?.titleVisible && snapshot.growthNodeCount >= 6 && snapshot.growthNodeCount <= 8 ? snapshot : null;
+        const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM5Snapshot?.();
+        return snapshot?.deviceTier === 'low' && snapshot.audioUnlocked && snapshot.enemySoftCap === 120 && snapshot.targetFps === 24
+          ? snapshot
+          : null;
       })()`
     );
 
-    const seededSave = {
-      version: 1,
-      soulCrystals: 50,
-      growth: zeroGrowth(),
-      bestKills: 0,
-      bestTime: 0,
-      runs: 0
-    };
-    await client.send('Runtime.evaluate', {
-      expression: `localStorage.setItem(${JSON.stringify(saveKey)}, ${JSON.stringify(JSON.stringify(seededSave))})`,
-      returnByValue: true
-    });
-    await navigate(client, baseUrl);
-    await waitForValue(client, `document.querySelector('[data-node-id="vitality"]:not(:disabled)') ? true : null`);
-    await client.send('Runtime.evaluate', {
-      expression: `document.querySelector('[data-node-id="vitality"]')?.click()`,
-      returnByValue: true
-    });
-    const purchaseSnapshot = await waitForValue(
+    await navigate(client, prodUrl);
+    const serviceWorkerReady = await waitForValue(
       client,
-      `(() => {
-        const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM4Snapshot?.();
-        return snapshot?.growthLevels?.vitality === 1 && snapshot.soulCrystals < 50 ? snapshot : null;
-      })()`
-    );
-
-    await navigate(client, `${baseUrl}?m4autostart=1&m4gameover=1`);
-    const resultSnapshot = await waitForValue(
-      client,
-      `(() => {
-        const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM4Snapshot?.();
-        return snapshot?.resultVisible && snapshot.lastRunSoulCrystals > 0 && snapshot.persistedRuns >= 1 ? snapshot : null;
-      })()`,
+      `navigator.serviceWorker?.ready
+        ?.then(() => navigator.serviceWorker.getRegistrations())
+        .then((registrations) => registrations.some((registration) => Boolean(registration.active)))
+        .then((ready) => ready ? true : null) ?? null`,
       12000
     );
 
-    await client.send('Runtime.evaluate', {
-      expression: `localStorage.setItem(${JSON.stringify(saveKey)}, '{broken')`,
-      returnByValue: true
-    });
-    await navigate(client, baseUrl);
-    const corruptSnapshot = await waitForValue(
-      client,
-      `(() => {
-        const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM4Snapshot?.();
-        return snapshot?.titleVisible && snapshot.saveFallbackUsed ? snapshot : null;
-      })()`
-    );
-
-    const layoutOk = await waitForValue(
-      client,
-      `(() => {
-        const nodes = [...document.querySelectorAll('.title-screen:not(.hidden), .result-panel:not(.hidden), .game-hud')];
-        if (nodes.length === 0) return null;
-        return nodes.every((node) => {
-          const rect = node.getBoundingClientRect();
-          return rect.left >= -1 && rect.top >= -1 && rect.right <= window.innerWidth + 1 && rect.bottom <= window.innerHeight + 1;
-        }) ? true : null;
-      })()`
-    );
-
-    if (!layoutOk) {
-      throw new Error('M4 UI layout exceeded the mobile viewport');
+    if (!serviceWorkerReady) {
+      throw new Error('Service Worker did not become active');
     }
 
     console.log(
-      `M4 browser verified: nodes=${titleSnapshot.growthNodeCount}, vitality=${purchaseSnapshot.growthLevels.vitality}, reward=${resultSnapshot.lastRunSoulCrystals}, fallback=${corruptSnapshot.saveFallbackUsed}`
+      `M5 browser verified: tier=${lowSnapshot.deviceTier}, cap=${lowSnapshot.enemySoftCap}, audio=${lowSnapshot.audioUnlocked}, sw=${serviceWorkerReady}`
     );
     socket.close();
   } finally {
     chromium.kill('SIGTERM');
+    staticServer.close();
     await delay(300);
     await rm(userDataDir, { recursive: true, force: true });
     await rm(homeDir, { recursive: true, force: true });

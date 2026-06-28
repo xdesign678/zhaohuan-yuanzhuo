@@ -55,6 +55,15 @@ function createState(enemy = createEnemy()): GameState {
       spawned: 0,
       reactions: 0
     },
+    performance: {
+      tier: 'high',
+      targetFps: 60,
+      minFps: 30,
+      enemySoftCap: 220,
+      particleLimit: 56,
+      renderPadding: 84,
+      enableExtraFx: true
+    },
     reactionDamageMultiplier: 1,
     soulCrystalMultiplier: 1,
     runStatus: 'playing',

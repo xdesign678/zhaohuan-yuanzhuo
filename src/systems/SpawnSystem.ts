@@ -10,13 +10,19 @@ export class SpawnSystem {
     this.spawnTimer -= deltaSeconds;
     const activeEnemies = this.countActiveEnemies(state);
 
-    if (activeEnemies >= BALANCE.enemy.softCap || this.spawnTimer > 0) {
+    if (this.spawnTimer > 0) {
       return;
     }
 
     const elapsed = state.stats.runtime;
     const hp = BALANCE.enemy.baseHp + Math.floor(elapsed / 20) * 4;
     const speed = BALANCE.enemy.baseSpeed + Math.min(28, elapsed * 0.08);
+    if (activeEnemies >= state.performance.enemySoftCap) {
+      this.refreshOffscreenPressure(state, entities, hp, speed);
+      this.spawnTimer = Math.max(0.08, BALANCE.enemy.spawnInterval - elapsed * 0.002);
+      return;
+    }
+
     this.spawnAroundEdges(state, entities, hp, speed);
     this.spawnTimer = Math.max(0.08, BALANCE.enemy.spawnInterval - elapsed * 0.002);
   }
@@ -66,5 +72,20 @@ export class SpawnSystem {
       }
     }
     return count;
+  }
+
+  private refreshOffscreenPressure(state: GameState, entities: EntityManager, hp: number, speed: number): void {
+    const padding = state.performance.renderPadding;
+    for (const enemy of state.enemies) {
+      if (!enemy.active) {
+        continue;
+      }
+
+      if (enemy.x < -padding || enemy.x > GAME_WIDTH + padding || enemy.y < -padding || enemy.y > GAME_HEIGHT + padding) {
+        entities.releaseEnemy(enemy);
+        this.spawnAroundEdges(state, entities, hp + 4, speed + 2);
+        return;
+      }
+    }
   }
 }
