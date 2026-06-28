@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
-    "verify:m0": "node tools/verify-m0-browser.mjs"
+    "verify:m0": "node tools/verify-m0-browser.mjs",
+    "verify:m1": "node tools/verify-m1-performance.mjs"
   },
   "dependencies": {
     "phaser": "3.80.1"

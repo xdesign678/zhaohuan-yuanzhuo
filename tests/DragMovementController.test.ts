@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { DragMovementController } from '../src/ui/DragInput';
 
 describe('DragMovementController', () => {
+  it('can be initialized at the current player position before the first drag', () => {
+    const controller = new DragMovementController({
+      minX: 0,
+      minY: 0,
+      maxX: 320,
+      maxY: 480
+    });
+
+    controller.snapTo({ x: 160, y: 240 });
+
+    expect(controller.target).toEqual({ x: 160, y: 240 });
+  });
+
   it('uses drag delta instead of teleporting the player to the finger', () => {
     const controller = new DragMovementController({
       minX: 0,

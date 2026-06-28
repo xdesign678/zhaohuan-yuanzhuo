@@ -40,6 +40,13 @@ export class DragMovementController {
     return this.activePointerId !== null;
   }
 
+  public snapTo(point: Point): void {
+    this.currentTargetX = this.clampX(point.x);
+    this.currentTargetY = this.clampY(point.y);
+    this.targetStartX = this.currentTargetX;
+    this.targetStartY = this.currentTargetY;
+  }
+
   public start(pointerId: number, pointer: Point, playerPosition: Point): void {
     if (this.activePointerId !== null) {
       return;

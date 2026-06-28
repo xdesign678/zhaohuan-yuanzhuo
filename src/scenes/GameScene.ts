@@ -1,14 +1,24 @@
 import Phaser from 'phaser';
+import { GAME_HEIGHT, GAME_WIDTH } from '../data/Balance';
+import type { Enemy, Gem } from '../entities/GameTypes';
+import { GameSimulation } from '../systems/GameSimulation';
 import { DragMovementController } from '../ui/DragInput';
+import { HUD } from '../ui/HUD';
 
-const GAME_WIDTH = 360;
-const GAME_HEIGHT = 640;
 const PLAYER_SIZE = 42;
 const PLAYER_SPEED = 520;
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Rectangle;
+  private petView!: Phaser.GameObjects.Rectangle;
   private movement!: DragMovementController;
+  private simulation!: GameSimulation;
+  private hud!: HUD;
+  private readonly enemyViews = new Map<number, Phaser.GameObjects.Rectangle>();
+  private readonly gemViews = new Map<number, Phaser.GameObjects.Arc>();
+  private readonly fpsSamples = new Array<number>(90).fill(60);
+  private fpsSampleIndex = 0;
+  private fpsSampleCount = 0;
 
   public constructor() {
     super('GameScene');
@@ -18,11 +28,13 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#09080d');
     this.createBackdrop();
 
-    const startX = GAME_WIDTH / 2;
-    const startY = GAME_HEIGHT / 2;
+    this.simulation = this.isPerformanceGate() ? GameSimulation.createForPerformanceGate() : GameSimulation.create();
+    const startX = this.simulation.state.summoner.x;
+    const startY = this.simulation.state.summoner.y;
     this.player = this.add
       .rectangle(startX, startY, PLAYER_SIZE, PLAYER_SIZE, 0x78f2c4, 1)
       .setStrokeStyle(2, 0x16101f);
+    this.petView = this.add.rectangle(startX + 34, startY - 28, 22, 22, 0xf2d36b, 1).setStrokeStyle(2, 0x16101f);
 
     const halfSize = PLAYER_SIZE / 2;
     this.movement = new DragMovementController({
@@ -31,6 +43,8 @@ export class GameScene extends Phaser.Scene {
       maxX: GAME_WIDTH - halfSize,
       maxY: GAME_HEIGHT - halfSize
     });
+    this.movement.snapTo({ x: startX, y: startY });
+    this.hud = new HUD(document.body);
 
     this.input.addPointer(4);
     this.input.on('pointerdown', this.handlePointerDown, this);
@@ -38,11 +52,29 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerup', this.handlePointerEnd, this);
     this.input.on('pointerupoutside', this.handlePointerEnd, this);
     this.input.on('pointercancel', this.handlePointerEnd, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyScene, this);
   }
 
   public update(_time: number, delta: number): void {
-    const dx = this.movement.targetX - this.player.x;
-    const dy = this.movement.targetY - this.player.y;
+    this.recordFrame(delta);
+    this.moveSummoner(delta);
+    this.simulation.update(delta / 1000);
+    this.renderSimulation();
+  }
+
+  public getM1Snapshot(): { enemyCount: number; kills: number; level: number; fps: number } {
+    return {
+      enemyCount: this.simulation.countActiveEnemies(),
+      kills: this.simulation.state.summoner.kills,
+      level: this.simulation.state.summoner.level,
+      fps: this.getAverageFps()
+    };
+  }
+
+  private moveSummoner(delta: number): void {
+    const summoner = this.simulation.state.summoner;
+    const dx = this.movement.targetX - summoner.x;
+    const dy = this.movement.targetY - summoner.y;
     const distanceSquared = dx * dx + dy * dy;
 
     if (distanceSquared <= 0.01) {
@@ -52,12 +84,80 @@ export class GameScene extends Phaser.Scene {
     const maxStep = PLAYER_SPEED * (delta / 1000);
 
     if (distanceSquared <= maxStep * maxStep) {
-      this.player.setPosition(this.movement.targetX, this.movement.targetY);
+      this.simulation.setSummonerPosition(this.movement.targetX, this.movement.targetY);
       return;
     }
 
     const distance = Math.sqrt(distanceSquared);
-    this.player.setPosition(this.player.x + (dx / distance) * maxStep, this.player.y + (dy / distance) * maxStep);
+    this.simulation.setSummonerPosition(summoner.x + (dx / distance) * maxStep, summoner.y + (dy / distance) * maxStep);
+  }
+
+  private renderSimulation(): void {
+    const state = this.simulation.state;
+    this.player.setPosition(state.summoner.x, state.summoner.y);
+
+    const pet = state.pets[0];
+    if (pet?.active) {
+      this.petView.setVisible(true).setPosition(pet.x, pet.y);
+    } else {
+      this.petView.setVisible(false);
+    }
+
+    this.renderEnemies(state.enemies);
+    this.renderGems(state.gems);
+    this.hud.update(state, this.simulation.countActiveEnemies(), this.getAverageFps());
+  }
+
+  private renderEnemies(enemies: Enemy[]): void {
+    for (const enemy of enemies) {
+      let view = this.enemyViews.get(enemy.id);
+      if (!view) {
+        view = this.add.rectangle(enemy.x, enemy.y, enemy.radius * 2, enemy.radius * 2, 0x9a3f58, 1).setStrokeStyle(1, 0x1b1018);
+        this.enemyViews.set(enemy.id, view);
+      }
+
+      view.setVisible(enemy.active);
+      if (enemy.active) {
+        const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
+        view.setFillStyle(hpRatio > 0.5 ? 0x9a3f58 : 0xd46a62, 1);
+        view.setPosition(enemy.x, enemy.y);
+      }
+    }
+  }
+
+  private renderGems(gems: Gem[]): void {
+    for (const gem of gems) {
+      let view = this.gemViews.get(gem.id);
+      if (!view) {
+        view = this.add.circle(gem.x, gem.y, gem.radius, 0x5cd6ff, 1).setStrokeStyle(1, 0x10212e);
+        this.gemViews.set(gem.id, view);
+      }
+
+      view.setVisible(gem.active);
+      if (gem.active) {
+        view.setPosition(gem.x, gem.y);
+      }
+    }
+  }
+
+  private recordFrame(delta: number): void {
+    const fps = delta > 0 ? 1000 / delta : 60;
+    this.fpsSamples[this.fpsSampleIndex] = fps;
+    this.fpsSampleIndex = (this.fpsSampleIndex + 1) % this.fpsSamples.length;
+    this.fpsSampleCount = Math.min(this.fpsSampleCount + 1, this.fpsSamples.length);
+  }
+
+  private getAverageFps(): number {
+    if (this.fpsSampleCount === 0) {
+      return 60;
+    }
+
+    let total = 0;
+    for (let index = 0; index < this.fpsSampleCount; index += 1) {
+      total += this.fpsSamples[index] ?? 60;
+    }
+
+    return total / this.fpsSampleCount;
   }
 
   private createBackdrop(): void {
@@ -74,7 +174,7 @@ export class GameScene extends Phaser.Scene {
 
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
     this.preventNativeGesture(pointer);
-    this.movement.start(pointer.id, { x: pointer.x, y: pointer.y }, { x: this.player.x, y: this.player.y });
+    this.movement.start(pointer.id, { x: pointer.x, y: pointer.y }, { x: this.simulation.state.summoner.x, y: this.simulation.state.summoner.y });
   }
 
   private handlePointerMove(pointer: Phaser.Input.Pointer): void {
@@ -89,5 +189,13 @@ export class GameScene extends Phaser.Scene {
 
   private preventNativeGesture(pointer: Phaser.Input.Pointer): void {
     pointer.event?.preventDefault();
+  }
+
+  private isPerformanceGate(): boolean {
+    return new URLSearchParams(window.location.search).get('m1perf') === '1';
+  }
+
+  private destroyScene(): void {
+    this.hud.destroy();
   }
 }
