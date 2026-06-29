@@ -84,6 +84,28 @@ async function navigate(client, url) {
   await waitForValue(client, 'document.readyState === "complete" ? true : null');
 }
 
+async function tapSelector(client, selector, index = 0) {
+  const rect = await waitForValue(
+    client,
+    `(() => {
+      const node = document.querySelectorAll(${JSON.stringify(selector)})[${index}];
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`
+  );
+
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: rect.x, y: rect.y, id: 1, radiusX: 8, radiusY: 8, force: 1 }]
+  });
+  await delay(120);
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: []
+  });
+}
+
 async function main() {
   await rm(userDataDir, { recursive: true, force: true });
   await rm(homeDir, { recursive: true, force: true });
@@ -148,11 +170,8 @@ async function main() {
       })()`
     );
 
-    await client.send('Runtime.evaluate', {
-      expression: `document.querySelectorAll('.upgrade-card')[1]?.click()`,
-      returnByValue: true
-    });
-    const afterClick = await waitForValue(
+    await tapSelector(client, '.upgrade-card', 1);
+    const afterTouch = await waitForValue(
       client,
       `(() => {
         const snapshot = globalThis.__ZH_GAME__?.scene?.getScene('GameScene')?.getM2Snapshot?.();
@@ -161,7 +180,7 @@ async function main() {
     );
 
     console.log(
-      `M2 browser verified: pets=${allPets.petNames.join('/')}, reactions=${allPets.reactions}, choices=${choices.snapshot.upgradeChoiceCount}, afterClickPets=${afterClick.petCount}`
+      `M2 browser verified: pets=${allPets.petNames.join('/')}, reactions=${allPets.reactions}, choices=${choices.snapshot.upgradeChoiceCount}, afterTouchPets=${afterTouch.petCount}`
     );
     socket.close();
   } finally {

@@ -1,4 +1,5 @@
 import type { UpgradeChoice } from '../data/UpgradeDefs';
+import { bindPress } from './Press';
 
 export class UpgradePanel {
   private readonly root: HTMLDivElement;
@@ -57,7 +58,7 @@ export class UpgradePanel {
     description.textContent = choice.description;
 
     button.append(title, description);
-    button.addEventListener('click', () => {
+    bindPress(button, () => {
       this.onChoose(choice.id);
     });
 
