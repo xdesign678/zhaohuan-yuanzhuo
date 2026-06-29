@@ -46,6 +46,7 @@ export class GameScene extends Phaser.Scene {
   private lastSoundLevel = 1;
   private lastSoundReactions = 0;
   private lastSoundHp = 100;
+  private activeDocumentPointerId: number | null = null;
 
   public constructor() {
     super('GameScene');
@@ -113,6 +114,14 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerup', this.handlePointerEnd, this);
     this.input.on('pointerupoutside', this.handlePointerEnd, this);
     this.input.on('pointercancel', this.handlePointerEnd, this);
+    document.addEventListener('pointerdown', this.handleDocumentPointerDown);
+    document.addEventListener('pointermove', this.handleDocumentPointerMove);
+    document.addEventListener('pointerup', this.handleDocumentPointerEnd);
+    document.addEventListener('pointercancel', this.handleDocumentPointerEnd);
+    document.addEventListener('touchstart', this.handleDocumentTouchStart, { passive: false });
+    document.addEventListener('touchmove', this.handleDocumentTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleDocumentTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', this.handleDocumentTouchEnd, { passive: false });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyScene, this);
 
     if (this.shouldAutostart()) {
@@ -378,6 +387,92 @@ export class GameScene extends Phaser.Scene {
     pointer.event?.preventDefault();
   }
 
+  private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
+    if (!this.shouldAcceptWorldDrag(event.target)) {
+      return;
+    }
+
+    const point = this.screenToGamePoint(event.clientX, event.clientY);
+    this.activeDocumentPointerId = event.pointerId;
+    this.movement.start(event.pointerId, point, { x: this.simulation.state.summoner.x, y: this.simulation.state.summoner.y });
+    event.preventDefault();
+  };
+
+  private readonly handleDocumentPointerMove = (event: PointerEvent): void => {
+    if (this.activeDocumentPointerId !== event.pointerId) {
+      return;
+    }
+
+    const point = this.screenToGamePoint(event.clientX, event.clientY);
+    this.movement.move(event.pointerId, point);
+    event.preventDefault();
+  };
+
+  private readonly handleDocumentPointerEnd = (event: PointerEvent): void => {
+    if (this.activeDocumentPointerId !== event.pointerId) {
+      return;
+    }
+
+    this.movement.end(event.pointerId);
+    this.activeDocumentPointerId = null;
+    event.preventDefault();
+  };
+
+  private readonly handleDocumentTouchStart = (event: TouchEvent): void => {
+    if (!this.shouldAcceptWorldDrag(event.target) || this.movement.isDragging || event.changedTouches.length === 0) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+
+    const point = this.screenToGamePoint(touch.clientX, touch.clientY);
+    this.movement.start(touch.identifier, point, { x: this.simulation.state.summoner.x, y: this.simulation.state.summoner.y });
+    event.preventDefault();
+  };
+
+  private readonly handleDocumentTouchMove = (event: TouchEvent): void => {
+    if (!this.movement.isDragging) {
+      return;
+    }
+
+    for (const touch of Array.from(event.changedTouches)) {
+      const point = this.screenToGamePoint(touch.clientX, touch.clientY);
+      this.movement.move(touch.identifier, point);
+    }
+    event.preventDefault();
+  };
+
+  private readonly handleDocumentTouchEnd = (event: TouchEvent): void => {
+    if (!this.movement.isDragging) {
+      return;
+    }
+
+    for (const touch of Array.from(event.changedTouches)) {
+      this.movement.end(touch.identifier);
+    }
+    event.preventDefault();
+  };
+
+  private shouldAcceptWorldDrag(target: EventTarget | null): boolean {
+    if (!this.isPlaying || this.simulation.state.summoner.upgradePaused || this.titleScreen.isVisible() || this.resultPanel.isVisible()) {
+      return false;
+    }
+
+    const element = target instanceof Element ? target : null;
+    return !element?.closest('button, .upgrade-panel:not(.hidden), .title-screen:not(.hidden), .result-panel:not(.hidden)');
+  }
+
+  private screenToGamePoint(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.game.canvas.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * GAME_WIDTH,
+      y: ((clientY - rect.top) / rect.height) * GAME_HEIGHT
+    };
+  }
+
   private createSimulationFromUrl(saveData: SaveData): GameSimulation {
     const params = new URLSearchParams(window.location.search);
     if (params.get('m1perf') === '1') {
@@ -393,6 +488,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private destroyScene(): void {
+    document.removeEventListener('pointerdown', this.handleDocumentPointerDown);
+    document.removeEventListener('pointermove', this.handleDocumentPointerMove);
+    document.removeEventListener('pointerup', this.handleDocumentPointerEnd);
+    document.removeEventListener('pointercancel', this.handleDocumentPointerEnd);
+    document.removeEventListener('touchstart', this.handleDocumentTouchStart);
+    document.removeEventListener('touchmove', this.handleDocumentTouchMove);
+    document.removeEventListener('touchend', this.handleDocumentTouchEnd);
+    document.removeEventListener('touchcancel', this.handleDocumentTouchEnd);
     this.hud.destroy();
     this.titleScreen.destroy();
     this.resultPanel.destroy();

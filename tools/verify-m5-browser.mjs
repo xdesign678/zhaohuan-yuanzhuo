@@ -107,6 +107,50 @@ async function tapSelector(client, selector) {
   });
 }
 
+async function dragFromBottomEdge(client) {
+  const before = await waitForValue(
+    client,
+    `(() => {
+      const scene = globalThis.__ZH_GAME__?.scene?.getScene('GameScene');
+      const canvas = document.querySelector('canvas');
+      if (!scene?.player || !canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      return {
+        player: { x: scene.player.x, y: scene.player.y },
+        start: { x: window.innerWidth / 2, y: window.innerHeight - 24 },
+        end: { x: window.innerWidth / 2 + 90, y: window.innerHeight - 108 },
+        canvasBottom: rect.bottom,
+        viewportHeight: window.innerHeight
+      };
+    })()`
+  );
+
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: before.start.x, y: before.start.y, id: 2, radiusX: 8, radiusY: 8, force: 1 }]
+  });
+  await delay(120);
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x: before.end.x, y: before.end.y, id: 2, radiusX: 8, radiusY: 8, force: 1 }]
+  });
+  await delay(900);
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: []
+  });
+
+  return waitForValue(
+    client,
+    `(() => {
+      const scene = globalThis.__ZH_GAME__?.scene?.getScene('GameScene');
+      if (!scene?.player) return null;
+      const moved = scene.player.x > ${before.player.x + 20} && scene.player.y < ${before.player.y - 20};
+      return moved ? { before: ${JSON.stringify(before.player)}, after: { x: scene.player.x, y: scene.player.y }, canvasBottom: ${before.canvasBottom}, viewportHeight: ${before.viewportHeight} } : null;
+    })()`
+  );
+}
+
 function createStaticServer() {
   const root = join(process.cwd(), 'dist');
   const mimeTypes = new Map([
@@ -201,6 +245,7 @@ async function main() {
           : null;
       })()`
     );
+    const movementSnapshot = await dragFromBottomEdge(client);
 
     await navigate(client, prodUrl);
     const serviceWorkerReady = await waitForValue(
@@ -217,7 +262,7 @@ async function main() {
     }
 
     console.log(
-      `M5 browser verified: tier=${lowSnapshot.deviceTier}, cap=${lowSnapshot.enemySoftCap}, audio=${lowSnapshot.audioUnlocked}, sw=${serviceWorkerReady}`
+      `M5 browser verified: tier=${lowSnapshot.deviceTier}, cap=${lowSnapshot.enemySoftCap}, audio=${lowSnapshot.audioUnlocked}, moved=${movementSnapshot.after.x.toFixed(1)}, sw=${serviceWorkerReady}`
     );
     socket.close();
   } finally {
